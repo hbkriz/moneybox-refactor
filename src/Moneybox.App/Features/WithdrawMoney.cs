@@ -20,7 +20,7 @@ namespace Moneybox.App.Features
             var fromAccount = this.accountRepository.GetAccountById(fromAccountId);
             
             if(fromAccount == null)
-                throw new InvalidOperationException($"Unable to find mentioned account");
+                throw new Exception($"Unable to find mentioned account");
 
             try 
             {

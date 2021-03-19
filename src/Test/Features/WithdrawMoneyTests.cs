@@ -27,15 +27,14 @@ namespace Test.Features
 
         [Test]
         //Balance
-        [TestCase(1000, 200, 1, 1, 0, 0)] //Postive scenario
-        [TestCase(500, 500, 1, 1, 1, 0)] //Semi-Postive scenario which will notify low balance
-        [TestCase(0, 500, 1, 0, 0, 0)] //Negative scenario - fails updating due to Get method failing 
+        [TestCase(1000, 200, 1, 1, 0)] //Postive scenario
+        [TestCase(500, 500, 1, 1, 1)] //Semi-Postive scenario which will notify low balance
+        [TestCase(0, 500, 1, 0, 0)] //Negative scenario - fails updating due to Get method failing 
         public void Testing_AllCombinations_ForWithdraw(
         decimal balance, decimal amount, 
         int get_account_count,
         int update_account_count,
-        int notify_funds_low_count,
-        int notify_payin_limit_count)
+        int notify_funds_low_count)
         {
             //Arrange
             _accountRepositoryMock.Setup(x => x.GetAccountById(It.IsAny<Guid>()))
@@ -63,7 +62,99 @@ namespace Test.Features
             _accountRepositoryMock.Verify(x => x.GetAccountById(It.IsAny<Guid>()), Times.Exactly(get_account_count));
             _accountRepositoryMock.Verify(x => x.Update(It.IsAny<Account>()), Times.Exactly(update_account_count));
             _notificationServiceMock.Verify(x => x.NotifyFundsLow(It.IsAny<string>()), Times.Exactly(notify_funds_low_count));
-            _notificationServiceMock.Verify(x => x.NotifyApproachingPayInLimit(It.IsAny<string>()), Times.Exactly(notify_payin_limit_count));
+            _notificationServiceMock.Verify(x => x.NotifyApproachingPayInLimit(It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        public void Testing_With_AccountNotFound_ForWithdraw()
+        {
+            //Arrange
+            var amount = 1101.99M;
+            _accountRepositoryMock.Setup(x => x.GetAccountById(It.IsAny<Guid>())).Verifiable();
+            
+            _accountRepositoryMock.Setup(x => x.Update(It.IsAny<Account>())).Verifiable();
+
+            _notificationServiceMock.Setup(x => x.NotifyFundsLow(It.IsAny<string>())).Verifiable();
+            _notificationServiceMock.Setup(x => x.NotifyApproachingPayInLimit(It.IsAny<string>())).Verifiable();
+
+            //Act
+            var exception = Assert.Throws<Exception>(() => _withdrawMoney.Execute(_accountId, amount),"This should throw error for data not found exception");
+            Assert.AreEqual("Unable to find mentioned account", exception.Message);
+
+            //Assert
+            _accountRepositoryMock.Verify(x => x.GetAccountById(It.IsAny<Guid>()), Times.Exactly(1));
+            _accountRepositoryMock.Verify(x => x.Update(It.IsAny<Account>()), Times.Never);
+            _notificationServiceMock.Verify(x => x.NotifyFundsLow(It.IsAny<string>()), Times.Never);
+            _notificationServiceMock.Verify(x => x.NotifyApproachingPayInLimit(It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        //Balance - notification
+        [TestCase(500, 500, 1, 1)]
+        //PaidIn - notification
+        [TestCase(2000, 400, 1, 1)]
+        public void Testing_With_UserNotFound_ForWithdraw(decimal balance, decimal amount, 
+        int get_account_count,
+        int update_account_count)
+        {
+            //Arrange
+            _accountRepositoryMock.Setup(x => x.GetAccountById(It.IsAny<Guid>())).Returns(new Account 
+            {
+                Id =_accountId,
+                Balance = balance
+            });
+            
+            _accountRepositoryMock.Setup(x => x.Update(It.IsAny<Account>())).Verifiable();
+
+            _notificationServiceMock.Setup(x => x.NotifyFundsLow(It.IsAny<string>())).Verifiable();
+            _notificationServiceMock.Setup(x => x.NotifyApproachingPayInLimit(It.IsAny<string>())).Verifiable();
+
+            //Act
+            _withdrawMoney.Execute(_accountId, amount);
+
+            //Assert
+            _accountRepositoryMock.Verify(x => x.GetAccountById(It.IsAny<Guid>()), Times.Exactly(get_account_count));
+            _accountRepositoryMock.Verify(x => x.Update(It.IsAny<Account>()), Times.Exactly(update_account_count));
+            _notificationServiceMock.Verify(x => x.NotifyFundsLow(It.IsAny<string>()), Times.Never);
+            _notificationServiceMock.Verify(x => x.NotifyApproachingPayInLimit(It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        //Balance - notification
+        [TestCase(500, 500, 1, 1, null)]
+        //PaidIn - notification
+        [TestCase(2000, 400, 1, 1, "")]
+        public void Testing_With_EmailNullOrEmpty_ForWithdraw(decimal balance, decimal amount, 
+        int get_account_count,
+        int update_account_count,
+        string email)
+        {
+            //Arrange
+            _accountRepositoryMock.Setup(x => x.GetAccountById(It.IsAny<Guid>())).Returns(new Account 
+            {
+                Id =_accountId,
+                Balance = balance,
+                User = new User 
+                {
+                    Id = _userId,
+                    Name = "Test",
+                    Email = email
+                }
+            });
+            
+            _accountRepositoryMock.Setup(x => x.Update(It.IsAny<Account>())).Verifiable();
+
+            _notificationServiceMock.Setup(x => x.NotifyFundsLow(It.IsAny<string>())).Verifiable();
+            _notificationServiceMock.Setup(x => x.NotifyApproachingPayInLimit(It.IsAny<string>())).Verifiable();
+
+            //Act
+            _withdrawMoney.Execute(_accountId, amount);
+
+            //Assert
+            _accountRepositoryMock.Verify(x => x.GetAccountById(It.IsAny<Guid>()), Times.Exactly(get_account_count));
+            _accountRepositoryMock.Verify(x => x.Update(It.IsAny<Account>()), Times.Exactly(update_account_count));
+            _notificationServiceMock.Verify(x => x.NotifyFundsLow(It.IsAny<string>()), Times.Never);
+            _notificationServiceMock.Verify(x => x.NotifyApproachingPayInLimit(It.IsAny<string>()), Times.Never);
         }
     }
 }
