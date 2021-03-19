@@ -2,10 +2,8 @@
 
 namespace Moneybox.App
 {
-    public class Account
+    public partial class Account
     {
-        public const decimal PayInLimit = 4000m;
-
         public Guid Id { get; set; }
 
         public User User { get; set; }
@@ -15,5 +13,9 @@ namespace Moneybox.App
         public decimal Withdrawn { get; set; }
 
         public decimal PaidIn { get; set; }
+        
+        private const decimal PayInLimit = 4000m;
+
+        private const decimal MinimalLimit = 500m;
     }
 }
