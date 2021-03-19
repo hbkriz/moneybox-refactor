@@ -17,39 +17,32 @@ namespace Moneybox.App.Features
 
         public void Execute(Guid fromAccountId, Guid toAccountId, decimal amount)
         {
-            var from = this.accountRepository.GetAccountById(fromAccountId);
-            var to = this.accountRepository.GetAccountById(toAccountId);
+            var fromAccount = this.accountRepository.GetAccountById(fromAccountId);
+            var toAccount = this.accountRepository.GetAccountById(toAccountId);
+            
+            if(fromAccount == null || toAccount == null)
+                throw new InvalidOperationException($"Unable to find mentioned accounts");
 
-            var fromBalance = from.Balance - amount;
-            if (fromBalance < 0m)
+            try 
             {
-                throw new InvalidOperationException("Insufficient funds to make transfer");
+                fromAccount.Debit(amount);
+                toAccount.Credit(amount);
+                this.accountRepository.Update(fromAccount);
+                this.accountRepository.Update(toAccount);
             }
-
-            if (fromBalance < 500m)
+            catch(Exception ex)
             {
-                this.notificationService.NotifyFundsLow(from.User.Email);
+                Console.WriteLine($"Unable to process due to the following: {ex}");
             }
-
-            var paidIn = to.PaidIn + amount;
-            if (paidIn > Account.PayInLimit)
+            finally
             {
-                throw new InvalidOperationException("Account pay in limit reached");
+                if(fromAccount.IsLowBalanceApproaching && !string.IsNullOrEmpty(fromAccount.User?.Email))
+                    this.notificationService.NotifyFundsLow(fromAccount.User?.Email);
+                if(toAccount.IsPayInLimitApproaching && !string.IsNullOrEmpty(toAccount.User?.Email))
+                    this.notificationService.NotifyApproachingPayInLimit(toAccount.User?.Email);
+                if(string.IsNullOrEmpty(fromAccount.User?.Email) || string.IsNullOrEmpty(toAccount.User?.Email))
+                    Console.WriteLine($"Unable to send notification due to no email address");
             }
-
-            if (Account.PayInLimit - paidIn < 500m)
-            {
-                this.notificationService.NotifyApproachingPayInLimit(to.User.Email);
-            }
-
-            from.Balance = from.Balance - amount;
-            from.Withdrawn = from.Withdrawn - amount;
-
-            to.Balance = to.Balance + amount;
-            to.PaidIn = to.PaidIn + amount;
-
-            this.accountRepository.Update(from);
-            this.accountRepository.Update(to);
         }
     }
 }
